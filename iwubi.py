@@ -179,7 +179,9 @@ class IbusWubiEngine(IBus.Engine):
         self.is_invalidate = False
         self.preedit_string = ''
         # new(page_size:int, cursor_pos:int, cursor_visible:bool, round:bool)
-        self.lookup_table = IBus.LookupTable.new(5, 0, True, True)
+        # self.lookup_table = IBus.LookupTable.new(5, 0, True, True)
+        self.lookup_table = IBus.LookupTable.new(10, 0, True, True)
+        self.lookup_table.set_orientation(IBus.Orientation.HORIZONTAL)
         self.prop_list = IBus.PropList()
         self._input_mode = 0  # 0: Use direct input. 1: Use the WuBi table.
         self._prev_key = None
