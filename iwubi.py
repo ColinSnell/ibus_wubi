@@ -18,19 +18,29 @@ import locale
 
 logger = logconfig.get_logger()
 
+# 获取当前 Python 脚本所在的目录路径
 __base_dir__ = os.path.dirname(__file__)
 
-# gee thank you IBus :-)
+# 初始化一个空列表 num_keys，用于存储常规数字键（1到9和0）的IBus键值
 num_keys = []
+# 遍历1到9的数字，将IBus中的对应键值（如IBus.1, IBus.2,... IBus.9）追加到 num_keys 列表
 for n in range(1, 10):
-    num_keys.append(getattr(IBus, str(n)))
+    # 通过 getattr() 动态获取 IBus 对象的属性，并将其添加到 num_keys 列表
+    num_keys.append(getattr(IBus, str(n)))  # 这里会获取 IBus 对象中名为 '1', '2', ..., '9' 的属性值
+# 获取 IBus 对象中与 '0' 键对应的值，并将其添加到 num_keys 列表
 num_keys.append(getattr(IBus, '0'))
+# 删除变量 n，防止污染全局命名空间（这一步通常用来清理临时变量）
 del n
 
+# 初始化一个空列表 numpad_keys，用于存储小键盘的数字键（KP_1到KP_9和KP_0）的IBus键值
 numpad_keys = []
+# 遍历1到9的数字，将IBus中的小键盘对应键值（如 IBus.KP_1, IBus.KP_2,... IBus.KP_9）追加到 numpad_keys 列表
 for n in range(1, 10):
-    numpad_keys.append(getattr(IBus, 'KP_' + str(n)))
+    # 通过 getattr() 动态获取 IBus 对象的属性，获取名为 'KP_1', 'KP_2', ..., 'KP_9' 的键值
+    numpad_keys.append(getattr(IBus, 'KP_' + str(n)))  # 获取 IBus 对象中名为 'KP_1', 'KP_2' 等的属性值
+# 获取 IBus 对象中与 'KP_0' 键对应的值，并将其添加到 numpad_keys 列表
 numpad_keys.append(getattr(IBus, 'KP_0'))
+# 同样，删除变量 n，防止污染全局命名空间
 del n
 
 # sqlite3
@@ -494,45 +504,76 @@ class IbusWubiEngine(IBus.Engine):
     def do_cursor_down(self):
         return self.cursor_down()
 
-
-# the app (main interface to IBus)
 class IMApp:
     def __init__(self, exec_by_ibus):
+        # 构造函数，初始化 IMApp 实例
         if not exec_by_ibus:
+            # 如果不是通过 IBus 启动，则开启调试模式
             global debug_on
             debug_on = True
+        
+        # 初始化 GLib 的主循环
         self.mainloop = GLib.MainLoop()
+
+        # 创建 IBus 总线实例，用于与 IBus 系统进行通信
         self.bus = IBus.Bus()
+
+        # 连接到 IBus 的 "disconnected" 事件，当 IBus 连接断开时调用 bus_disconnected_cb 函数
         self.bus.connect("disconnected", self.bus_disconnected_cb)
+
+        # 创建 IBus Factory 实例，用于管理输入法引擎
         self.factory = IBus.Factory.new(self.bus.get_connection())
+
+        # 为 IBus 注册一个新的输入法引擎，名称为 "iwubi"，类型为 GObject.type_from_name("IbusWubiEngine")
         self.factory.add_engine("iwubi", GObject.type_from_name("IbusWubiEngine"))
+
+        # 如果通过 IBus 启动，则请求一个 IBus 服务名称
         if exec_by_ibus:
-            self.bus.request_name("com.github.honghe.iwubi", 0)
+            # 请求注册服务名 "com.github.ConlinSnell.ibus_wubi"，该名称将用于 IBus 启动
+            self.bus.request_name("com.github.ConlinSnell.ibus_wubi", 0)
         else:
+            # 如果不是通过 IBus 启动，则从本地文件系统加载输入法组件
             xml_path = os.path.join(__base_dir__, 'iwubi.xml')
             if os.path.exists(xml_path):
+                # 如果 iwubi.xml 文件存在，则从该文件创建组件
                 component = IBus.Component.new_from_file(xml_path)
             else:
+                # 如果文件不存在，查找其他路径，并从 iwubi.xml 文件创建组件
                 xml_path = os.path.join(os.path.dirname(__base_dir__),
                                         'ibus', 'component', 'iwubi.xml')
                 component = IBus.Component.new_from_file(xml_path)
+            
+            # 注册输入法组件
             self.bus.register_component(component)
 
     def run(self):
-        # open sqlite3
+        # 启动输入法应用程序的主循环
+
+        # 打开 SQLite3 数据库文件，路径为 'wubi-jidian86.db'
         db_file = os.path.join(__base_dir__, 'wubi-jidian86.db')
+        
+        # 连接到 SQLite3 数据库
         global conn
         conn = sqlite3.connect(db_file)
+        
+        # 创建数据库游标，用于执行 SQL 查询
         global c
         c = conn.cursor()
+
+        # 启动主循环，使应用程序开始运行，等待事件和回调
         self.mainloop.run()
 
     def bus_disconnected_cb(self, bus):
-        logger.debug('bus {}'.format(bus))
+        # 处理 IBus 总线断开时的回调函数
+        logger.debug('bus {}'.format(bus))  # 打印调试信息
+        
+        # 退出主循环
         self.mainloop.quit()
-        # close sqlite3
+
+        # 如果 SQLite 连接存在，则关闭数据库连接
         if conn:
             conn.close()
+
 
 
 def launch_engine(exec_by_ibus):
@@ -548,38 +589,49 @@ def print_help(out, v=0):
 
 
 def main():
+    # 尝试设置本地化（locale），以便在程序中使用本地语言和设置。如果失败，捕获异常并忽略
     try:
-        locale.setlocale(locale.LC_ALL, "")
+        locale.setlocale(locale.LC_ALL, "")  # 设置本地化为系统默认
     except:
-        pass
+        pass  # 如果设置失败，什么也不做
 
-    exec_by_ibus = False
-    daemonize = False
+    # 初始化变量，用于标记是否通过 IBus 启动和是否需要进行进程分离
+    exec_by_ibus = False  # 标记是否通过 IBus 启动
+    daemonize = False  # 标记是否需要后台运行（进程分离）
 
-    shortopt = "ihd"
-    longopt = ["ibus", "help", "daemonize"]
+    # 定义短选项和长选项
+    shortopt = "ihd"  # 短选项：-i, -h, -d
+    longopt = ["ibus", "help", "daemonize"]  # 长选项：--ibus, --help, --daemonize
 
+    # 解析命令行参数
     try:
         opts, args = getopt.getopt(sys.argv[1:], shortopt, longopt)
     except getopt.GetoptError:
+        # 如果解析参数时发生错误，打印帮助信息并退出
         print_help(sys.stderr, 1)
 
+    # 遍历命令行参数，并根据选项设置相应的标志
     for o, a in opts:
-        if o in ("-h", "--help"):
-            print_help(sys.stdout)
-        elif o in ("-d", "--daemonize"):
-            daemonize = True
-        elif o in ("-i", "--ibus"):
-            exec_by_ibus = True
+        if o in ("-h", "--help"):  # 如果用户请求帮助
+            print_help(sys.stdout)  # 打印帮助信息
+        elif o in ("-d", "--daemonize"):  # 如果选择了后台运行选项
+            daemonize = True  # 设置进程分离标志
+        elif o in ("-i", "--ibus"):  # 如果选择了通过 IBus 启动
+            exec_by_ibus = True  # 设置通过 IBus 启动标志
         else:
+            # 如果遇到未知的选项，打印错误信息并退出
             print("Unknown argument: %s" % o, file=sys.stderr)
             print_help(sys.stderr, 1)
 
+    # 如果需要后台运行（daemonize）
     if daemonize:
+        # 使用 os.fork() 创建一个子进程，父进程退出
         if os.fork():
-            sys.exit()
+            sys.exit()  # 父进程退出，子进程继续运行
 
+    # 启动引擎，传入是否通过 IBus 启动的标志
     launch_engine(exec_by_ibus)
+
 
 
 if __name__ == "__main__":
